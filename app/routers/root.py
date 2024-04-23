@@ -5,10 +5,11 @@ from fastapi.responses import FileResponse
 
 from app.config import llm_config
 
+from pymilvus import connections, utility
+
 """
 其余辅助功能
 """
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -19,12 +20,23 @@ def read_root():
 
 
 @router.get("/health")
-def health():
-    return {
-        "status": "healthy",
-        "llm_completion_model": llm_config["completion_service"]["llm_model"],
-        "embedding_service": llm_config["embedding_service"]["embedding_model_service"],
-    }
+async def health():
+    # Check if Milvus is up and running and if the required collections exist
+    connections.connect(host="milvus-standalone", port="19530")
+
+    try:
+        # Check if the required collections exist
+        inquiry_collection_exists = utility.has_collection("tg_inquiry_documents")
+        support_collection_exists = utility.has_collection("tg_support_documents")
+
+        if inquiry_collection_exists or support_collection_exists:
+            return {"status": "healthy",
+                    "llm_completion_model": llm_config["completion_service"]["llm_model"],
+                    "embedding_service": llm_config["embedding_service"]["embedding_model_service"]}
+        else:
+            return {"status": "Milvus is up and running, but no collection exist yet"}
+    except Exception as e:
+        return {"status": "Error checking Milvus health", "error": str(e)}
 
 
 @router.get("/metrics")

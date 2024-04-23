@@ -2,8 +2,9 @@ from datetime import datetime
 from langchain_community.vectorstores import Milvus
 from langchain_core.documents.base import Document
 import logging
-from pymilvus import connections, utility
-from time import time
+from pymilvus import connections, utility #, Milvus
+from pymilvus.exceptions import MilvusException
+
 from typing import Iterable, Tuple, List, Optional, Union
 
 from fastapi import HTTPException
@@ -12,6 +13,7 @@ from app.embeddings.base_embedding_store import EmbeddingStore
 from app.metrics.prometheus_metrics import metrics
 from app.log import req_id_cv
 from app.tools.logwriter import LogWriter
+from time import time, sleep
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ class MilvusEmbeddingStore(EmbeddingStore):
         username: str = "",
         password: str = "",
         alias: str = "alias",
+        retry_interval: int = 2, 
+        max_retry_attempts: int = 10, 
     ):
         self.embedding_service = embedding_service
         self.vector_field = vector_field
@@ -38,6 +42,8 @@ class MilvusEmbeddingStore(EmbeddingStore):
         self.support_ai_instance = support_ai_instance
         self.collection_name = collection_name
         self.milvus_alias = alias
+        self.retry_interval = retry_interval
+        self.max_retry_attempts = max_retry_attempts
 
         if host.startswith("http"):
             if host.endswith(str(port)):
@@ -62,23 +68,38 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 "timeout": 30,
             }
 
-        connections.connect(**self.milvus_connection)
-        metrics.milvus_active_connections.labels(self.collection_name).inc
-        LogWriter.info(
-            f"Initializing Milvus with host={host}, port={port}, username={username}, collection={collection_name}"
-        )
-        self.milvus = Milvus(
-            embedding_function=embedding_service,
-            collection_name=collection_name,
-            connection_args=self.milvus_connection,
-            auto_id=True,
-            drop_old=False,
-            text_field=text_field,
-            vector_field=vector_field,
-        )
+        self.connect_to_milvus()
 
         if not self.support_ai_instance:
             self.load_documents()
+
+    def connect_to_milvus(self):
+        retry_attempt = 0
+        while retry_attempt < self.max_retry_attempts:
+            try:
+                connections.connect(**self.milvus_connection)
+                metrics.milvus_active_connections.labels(self.collection_name).inc
+                LogWriter.info(
+                    f'''Initializing Milvus with host={self.milvus_connection.get("host", self.milvus_connection.get("uri", "unknown host"))},
+                    port={self.milvus_connection.get('port', 'unknown')}, username={self.milvus_connection.get('user', 'unknown')}, collection={self.collection_name}'''
+                )
+                self.milvus = Milvus(
+                    embedding_function=self.embedding_service,
+                    collection_name=self.collection_name,
+                    connection_args=self.milvus_connection,
+                    auto_id=True,
+                    drop_old=False,
+                    text_field=self.text_field,
+                    vector_field=self.vector_field,
+                )
+                return
+            except MilvusException as e:
+                retry_attempt += 1
+                if retry_attempt >= self.max_retry_attempts:
+                    raise e
+                else:
+                    LogWriter.info(f"Failed to connect to Milvus. Retrying in {self.retry_interval} seconds.")
+                    sleep(self.retry_interval)
 
     def check_collection_exists(self):
         connections.connect(**self.milvus_connection)
@@ -95,7 +116,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 metadata["description"] = record.get("description")
                 metadata["param_types"] = record.get("param_types")
                 metadata["custom_query"] = record.get("custom_query")
-
+                metadata["graphname"] = "all"
                 return metadata
 
             LogWriter.info("Milvus add initial load documents init()")
@@ -355,7 +376,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
             LogWriter.error(error_message)
             raise e
 
-    def retrieve_similar(self, query_embedding, top_k=10):
+    def retrieve_similar(self, query_embedding, top_k=10, filter_expr: str = None):
         """Retireve Similar.
         从给定查询嵌入的向量存储中检索topK相似的嵌入。
         Args:
@@ -378,7 +399,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
             ).inc()
             # 开始检索
             similar = self.milvus.similarity_search_by_vector(
-                embedding=query_embedding, k=top_k
+                embedding=query_embedding, k=top_k, expr=filter_expr
             )
             end_time = time()
             metrics.milvus_query_duration_seconds.labels(
@@ -438,6 +459,17 @@ class MilvusEmbeddingStore(EmbeddingStore):
         query_params["vector_field_name"] = "document_vector"
         query_params["vertex_id_field_name"] = "vertex_id"
         return query_params
-
+    
+    def list_registered_documents(self, graphname: str = None, only_custom: bool = False, output_fields: List[str] = ["*"]):
+        if only_custom and graphname:
+            res = self.milvus.col.query(expr="custom_query == true and graphname == '" + graphname + "'", output_fields=output_fields)
+        elif only_custom:
+            res = self.milvus.col.query(expr="custom_query == true", output_fields=output_fields)
+        elif graphname:
+            res = self.milvus.col.query(expr="graphname == '" + graphname + "'", output_fields=output_fields)
+        else:
+            res = self.milvus.col.query(expr="", limit=5000, output_fields=output_fields)
+        return res
+    
     def __del__(self):
         metrics.milvus_active_connections.labels(self.collection_name).dec

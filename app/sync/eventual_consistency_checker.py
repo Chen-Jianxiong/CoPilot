@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from typing import Dict, List
@@ -70,14 +69,14 @@ class EventualConsistencyChecker:
         else:
             return True
 
-    async def _chunk_document(self, content):
+    def _chunk_document(self, content):
         return self.chunker.chunk(content)
 
-    async def _extract_entities(self, content):
+    def _extract_entities(self, content):
         return self.extractor.extract(content)
 
     # TODO: Change to loading job for all chunks in document at once
-    async def _upsert_chunk(self, doc_id, chunk_id, chunk):
+    def _upsert_chunk(self, doc_id, chunk_id, chunk):
         date_added = int(time.time())
         self.conn.upsertVertex(
             "DocumentChunk",
@@ -101,7 +100,7 @@ class EventualConsistencyChecker:
             )
 
     # TODO: Change to loading job for all entities in document at once
-    async def _upsert_entities(self, src_id, src_type, entities):
+    def _upsert_entities(self, src_id, src_type, entities):
         date_added = int(time.time())
         self.conn.upsertVertices(
             "Entity",
@@ -138,7 +137,7 @@ class EventualConsistencyChecker:
         )
 
     # TODO: Change to loading job for all relationships in document at once
-    async def _upsert_rels(self, src_id, src_type, relationships):
+    def _upsert_rels(self, src_id, src_type, relationships):
         date_added = int(time.time())
         self.conn.upsertVertices(
             "Relationship",
@@ -182,7 +181,7 @@ class EventualConsistencyChecker:
             ],
         )
 
-    async def fetch_and_process_vertex(self):
+    def fetch_and_process_vertex(self):
         """ 获取和处理图数据库中的顶点。
         确保数据的最新状态，并且通过向量索引支持复杂的查询和分析操作。 """
 
@@ -220,11 +219,9 @@ class EventualConsistencyChecker:
             if v_type == "Document":
                 LogWriter.info(f"Chunking the content from vertex type: {v_type}")
                 for vertex_id, content in vertex_ids_content_map.items():
-                    chunks = await self._chunk_document(content)
+                    chunks = self._chunk_document(content)
                     for i, chunk in enumerate(chunks):
-                        await self._upsert_chunk(
-                            vertex_id, f"{vertex_id}_chunk_{i}", chunk
-                        )
+                        self._upsert_chunk(vertex_id, f"{vertex_id}_chunk_{i}", chunk)
 
             # 更新顶点处理状态
             if v_type == "Document" or v_type == "DocumentChunk":
@@ -233,13 +230,11 @@ class EventualConsistencyChecker:
                 )
                 for vertex_id, content in vertex_ids_content_map.items():
                     # 从文档中提取实体关系
-                    extracted = await self._extract_entities(content)
+                    extracted = self._extract_entities(content)
                     if len(extracted["nodes"]) > 0:
-                        await self._upsert_entities(
-                            vertex_id, v_type, extracted["nodes"]
-                        )
+                        self._upsert_entities(vertex_id, v_type, extracted["nodes"])
                     if len(extracted["rels"]) > 0:
-                        await self._upsert_rels(vertex_id, v_type, extracted["rels"])
+                        self._upsert_rels(vertex_id, v_type, extracted["rels"])
 
             LogWriter.info(
                 f"Updating the TigerGraph vertex ids to confirm that processing was completed"
@@ -256,18 +251,12 @@ class EventualConsistencyChecker:
 
         return len(vertex_ids_content_map) != 0
 
-    async def run_periodic_task(self):
-        while True:
-            worked = await self.fetch_and_process_vertex()
-
-            if not worked:
-                await asyncio.sleep(self.interval_seconds)
-
-    async def initialize(self):
-        if not self.is_initialized:
-            LogWriter.info(
-                f"Eventual Consistency Check initializing for graphname {self.graphname} with interval_seconds {self.interval_seconds}"
-            )
-            # 创建一个异步任务
-            asyncio.create_task(self.run_periodic_task())
-            self.is_initialized = True
+    def initialize(self):
+        LogWriter.info(
+            f"Eventual Consistency Check running for graphname {self.graphname} "
+        )
+        self.is_initialized = True
+        ok = self.fetch_and_process_vertex()
+        LogWriter.info(
+            f"Eventual Consistency Check finished for graphname {self.graphname}. Success={ok}"
+        )

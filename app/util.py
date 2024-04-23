@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBasicCredentials
+from fastapi.security import HTTPBasicCredentials, HTTPAuthorizationCredentials
 from pyTigerGraph import TigerGraphConnection
 
 from app.config import (db_config, embedding_service, get_llm_service,
@@ -15,10 +15,21 @@ logger = logging.getLogger(__name__)
 # 一致性检查dict
 consistency_checkers = {}
 
+def get_db_connection_id_token(graphname: str, credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]) -> TigerGraphConnectionProxy:
+    conn = TigerGraphConnection(
+        host=db_config["hostname"],
+        graphname=graphname,
+        apiToken = credentials,
+        tgCloud = True,
+        sslPort=14240
+    )
+    conn.customizeHeader(
+        timeout=db_config["default_timeout"] * 1000, responseSize=5000000
+    )
+    conn = TigerGraphConnectionProxy(conn, auth_mode="id_token")
+    return conn
 
-def get_db_connection(
-    graphname, credentials: Annotated[HTTPBasicCredentials, Depends(security)]
-) -> TigerGraphConnectionProxy:
+def get_db_connection_pwd(graphname, credentials: Annotated[HTTPBasicCredentials, Depends(security)]) -> TigerGraphConnectionProxy:
     conn = TigerGraphConnection(
         host=db_config["hostname"],
         username=credentials.username,
@@ -58,21 +69,15 @@ def get_db_connection(
     return conn
 
 
-async def get_eventual_consistency_checker(graphname: str):
+def get_eventual_consistency_checker(graphname: str, conn: TigerGraphConnectionProxy):
     """获得最终一致性检查器
-    管理和维护在异步数据处理和存储系统中，数据在不同节点间的最终一致性状态。"""
-
+        管理和维护在异步数据处理和存储系统中，数据在不同节点间的最终一致性状态。"""
     if not db_config.get("enable_consistency_checker", True):
         logger.debug("Eventual consistency checker disabled")
         return
 
     # 同步间隔（秒）
     check_interval_seconds = milvus_config.get("sync_interval_seconds", 30 * 60)
-    # 获得图数据库的连接
-    credentials = HTTPBasicCredentials(
-        username=db_config["username"], password=db_config["password"]
-    )
-    conn = get_db_connection(graphname, credentials)
 
     if graphname not in consistency_checkers:
         vector_indices = {}
@@ -144,6 +149,6 @@ async def get_eventual_consistency_checker(graphname: str):
             chunker,
             extractor,
         )
-        await checker.initialize()
+        checker.initialize()
         consistency_checkers[graphname] = checker
     return consistency_checkers[graphname]

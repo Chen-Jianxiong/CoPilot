@@ -1,26 +1,22 @@
 import json
 import logging
 import uuid
-from typing import Union
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from app.config import (embedding_service, embedding_store, get_llm_service,
-                        llm_config, status_manager)
-from app.log import req_id_cv
-from app.metrics.tg_proxy import TigerGraphConnectionProxy
-from app.py_schemas.schemas import (BatchDocumentIngest, CoPilotResponse,
-                                    CreateIngestConfig,
-                                    CreateVectorIndexConfig, LoadingInfo,
-                                    S3BatchDocumentIngest, SupportAIQuestion)
+                        llm_config)
+
+from app.py_schemas.schemas import (CoPilotResponse, CreateIngestConfig,
+                                    LoadingInfo, SupportAIQuestion)
 from app.supportai.concept_management.create_concepts import (
     CommunityConceptCreator, EntityConceptCreator, HigherLevelConceptCreator,
     RelationshipConceptCreator)
 from app.supportai.retrievers import (EntityRelationshipRetriever,
                                       HNSWOverlapRetriever, HNSWRetriever,
                                       HNSWSiblingRetriever)
-from app.supportai.supportai_ingest import BatchIngestion
-from app.util import get_db_connection, get_eventual_consistency_checker
+
+from app.util import get_eventual_consistency_checker
 
 """
 开发中，即将发布 alpha 版本
@@ -32,10 +28,13 @@ router = APIRouter(tags=["SupportAI"])
 
 
 @router.post("/{graphname}/supportai/initialize")
-def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_connection)):
+def initialize(graphname, conn: Request):
     """ 读取gsql文件，并使用conn.gsql()执行gsql文件中的语句。以初始化supportai """
     # 需要使用绝对路径打开文件
     # 定义了一个schema change job，其主要目的是在图数据库中添加一系列新的顶点类型和边类型。
+
+    conn = conn.state.conn
+    # need to open the file using the absolute path
     file_path = "app/gsql/supportai/SupportAI_Schema.gsql"
     with open(file_path, "r") as f:
         schema = f.read()
@@ -84,7 +83,7 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
         # 包括host_name以便从客户端进行调试。它们的pyTG conn可能与在copilot中配置的主机不同
         "host_name": conn._tg_connection.host,
         "schema_creation_status": json.dumps(schema_res),
-        "index_creation_status": json.dumps(index_res),
+        "index_creation_status": json.dumps(index_res)
     }
 
 
@@ -92,14 +91,11 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
 def create_ingest(
     graphname,
     ingest_config: CreateIngestConfig,
-    # 后台任务集合
-    background_tasks: BackgroundTasks,
-    conn: TigerGraphConnectionProxy = Depends(get_db_connection),
+    conn: Request
 ):
     """ 摄取文档前的准备工作 """
+    conn = conn.state.conn
 
-    # 添加一个在发送响应后在后台调用的函数（最终一致性检查器）。
-    background_tasks.add_task(get_eventual_consistency_checker, graphname)
     if ingest_config.file_format.lower() == "json":
         # 定义了一个数据加载作业，用于从 JSON 格式的文件中导入数据到图数据库中的顶点和边。
         file_path = "app/gsql/supportai/SupportAI_InitialLoadJSON.gsql"
@@ -229,10 +225,11 @@ def ingest(
     graphname,
     loader_info: LoadingInfo,
     background_tasks: BackgroundTasks,
-    conn: TigerGraphConnectionProxy = Depends(get_db_connection),
+    conn: Request
 ):
+    conn = conn.state.conn
     # 添加一个在发送响应后在后台调用的函数（最终一致性检查器）。
-    background_tasks.add_task(get_eventual_consistency_checker, graphname)
+    background_tasks.add_task(get_eventual_consistency_checker, graphname, conn)
     if loader_info.file_path is None:
         raise Exception("File path not provided")
     if loader_info.load_job_id is None:
@@ -272,17 +269,17 @@ def ingest(
         .split("\n")[0],
     }
 
+
 @router.post("/{graphname}/supportai/search")
-async def search(
+def search(
     graphname,
     query: SupportAIQuestion,
-    background_tasks: BackgroundTasks,
-    conn: TigerGraphConnectionProxy = Depends(get_db_connection),
+    conn: Request
 ):
     """
     搜索，使用llm从提问中提取实体关系，格式化、过滤类型，再由tg执行相关性得分过滤top_K
     """
-    background_tasks.add_task(get_eventual_consistency_checker, graphname)
+    conn = conn.state.conn
     if query.method.lower() == "hnswoverlap":
         # 创建基于 HNSW 索引的 overlap 搜索对象
         retriever = HNSWOverlapRetriever(
@@ -336,16 +333,15 @@ async def search(
 
 
 @router.post("/{graphname}/supportai/answerquestion")
-async def answer_question(
+def answer_question(
     graphname,
     query: SupportAIQuestion,
-    background_tasks: BackgroundTasks,
-    conn: TigerGraphConnectionProxy = Depends(get_db_connection),
+    conn: Request
 ):
     """
     与search相同的执行，在其结果上由llm生成回答
     """
-    background_tasks.add_task(get_eventual_consistency_checker, graphname)
+    conn = conn.state.conn
     resp = CoPilotResponse
     resp.response_type = "supportai"
     if query.method.lower() == "hnswoverlap":
@@ -406,15 +402,15 @@ async def answer_question(
 
 
 @router.get("/{graphname}/supportai/buildconcepts")
-async def build_concepts(
+def build_concepts(
     graphname,
     background_tasks: BackgroundTasks,
-    conn: TigerGraphConnectionProxy = Depends(get_db_connection),
+    conn: Request,
 ):
     """
     创建相关概念
     """
-
+    conn = conn.state.conn
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
     # 边
     rels_concepts = RelationshipConceptCreator(conn, llm_config, embedding_service)
@@ -434,10 +430,11 @@ async def build_concepts(
 
 @router.get("/{graphname}/supportai/forceupdate")
 async def force_update(
-    graphname: str, conn: TigerGraphConnectionProxy = Depends(get_db_connection)
+    graphname: str, conn: Request
 ):
     """
     强制更新，执行最终一次性检查器
     """
-    await get_eventual_consistency_checker(graphname)
+    conn = conn.state.conn
+    get_eventual_consistency_checker(graphname, conn)
     return {"status": "success"}
