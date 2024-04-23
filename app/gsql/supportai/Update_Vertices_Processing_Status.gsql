@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY Update_Vertices_Processing_Status(SET<VERTEX> processed_vertices) { 
+-- 分布式查询，更新一组特定顶点的处理状态。专门用于修改这些顶点的时间戳属性，标记它们为已处理状态。
+CREATE DISTRIBUTED QUERY Update_Vertices_Processing_Status(SET<VERTEX> processed_vertices) {
   start = {processed_vertices};
   
   res = SELECT s FROM start:s

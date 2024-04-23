@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MapQuestionToSchema(BaseTool):
     """MapQuestionToSchema Tool.
-    Tool to map questions to their datatypes in the database. Should be executed before GenerateFunction.
+    将问题映射到数据库中的数据类型的工具。应该在GenerateFunction之前执行。
     """
 
     name = "MapQuestionToSchema"
@@ -52,8 +52,9 @@ class MapQuestionToSchema(BaseTool):
                 The user's question.
         """
         LogWriter.info(f"request_id={req_id_cv.get()} ENTRY MapQuestionToSchema._run()")
+        # 创建动态输出解析器，用于解析LLM的输出
         parser = PydanticOutputParser(pydantic_object=MapQuestionToSchemaResponse)
-
+        # 初始化重述问题的模板
         RESTATE_QUESTION_PROMPT = PromptTemplate(
             template=self.prompt,
             input_variables=[
@@ -63,11 +64,14 @@ class MapQuestionToSchema(BaseTool):
                 "edges",
                 "edgesInfo",
             ],
+            # format_instructions: MapQuestionToSchemaResponse的格式
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
 
+        # 应用重述链
         restate_chain = LLMChain(llm=self.llm, prompt=RESTATE_QUESTION_PROMPT)
 
+        # 获取图数据库信息
         vertices = self.conn.getVertexTypes()
         edges = self.conn.getEdgeTypes()
 
@@ -84,6 +88,7 @@ class MapQuestionToSchema(BaseTool):
             edge_info = {"edge": edge, "source": source_vertex, "target": target_vertex}
             edges_info.append(edge_info)
 
+        # 使用 LLMChain，结合提供的提示模板和上面收集的数据，生成一个重新表述的问题。
         restate_q = restate_chain.apply(
             [
                 {
@@ -98,6 +103,7 @@ class MapQuestionToSchema(BaseTool):
 
         logger.debug(f"request_id={req_id_cv.get()} MapQuestionToSchema applied")
 
+        # 解析重述的问题：通过之前创建的 parser 解析重述问题的文本。
         parsed_q = parser.invoke(restate_q)
 
         logger.debug_pii(
@@ -108,6 +114,7 @@ class MapQuestionToSchema(BaseTool):
                          Format the response way explained below:
                         {format_instructions}"""
 
+        # 创建属性映射的模板：为属性映射过程定义一个新的提示模板。
         attr_parser = PydanticOutputParser(
             pydantic_object=MapAttributeToAttributeResponse
         )
@@ -120,7 +127,9 @@ class MapQuestionToSchema(BaseTool):
             },
         )
 
+        # 再映射一遍属性，使其能够与图数据库的属性名对齐，防止属性名错误
         attr_map_chain = LLMChain(llm=self.llm, prompt=ATTR_MAP_PROMPT)
+        # {'vertex_type_1': ['vertex_attribute_1', 'vertex_attribute_2']}
         for vertex in parsed_q.target_vertex_attributes.keys():
             map_attr = attr_map_chain.apply(
                 [
@@ -154,6 +163,7 @@ class MapQuestionToSchema(BaseTool):
         logger.debug(f"request_id={req_id_cv.get()} MapEdgeAttributes applied")
 
         try:
+            # 验证映射后的架构
             validate_schema(
                 self.conn,
                 parsed_q.target_vertex_types,

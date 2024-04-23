@@ -12,12 +12,12 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingModel(Embeddings):
     """EmbeddingModel.
-    Implements connections to the desired embedding API.
+    实现到所需嵌入API的连接。一个EmbeddingModel类，它连接到外部嵌入API服务。
     """
 
     def __init__(self, config: dict, model_name: str):
         """Initialize an EmbeddingModel
-        Read JSON config file and export the details as environment variables.
+        读取JSON配置文件并将详细信息(OPENAI_API_KEY)导出为环境变量。
         """
         for auth_detail in config["authentication_configuration"].keys():
             os.environ[auth_detail] = config["authentication_configuration"][
@@ -72,6 +72,7 @@ class EmbeddingModel(Embeddings):
             logger.debug_pii(
                 f"request_id={req_id_cv.get()} embed_query() embedding question={question}"
             )
+            # 调用相应模型的embed_query方法，为查询文本生成长度安全的嵌入
             query_embedding = self.embeddings.embed_query(question)
             LogWriter.info(f"request_id={req_id_cv.get()} EXIT embed_query()")
             metrics.llm_success_response_total.labels(self.model_name).inc()

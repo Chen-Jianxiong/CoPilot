@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional, Union, Annotated, List, Dict
 
-
+"""
+vo实体类
+"""
 class NaturalLanguageQuery(BaseModel):
     query: str
 

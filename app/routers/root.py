@@ -5,6 +5,10 @@ from fastapi.responses import FileResponse
 
 from app.config import llm_config
 
+"""
+其余辅助功能
+"""
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -27,6 +31,7 @@ def health():
 async def metrics():
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+    # generate_latest()：以字符串形式以最新文本格式从注册中心返回指标。
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

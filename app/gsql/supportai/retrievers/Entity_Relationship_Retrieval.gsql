@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY Entity_Relationship_Retrieval(SET<STRING> entities, SET<STRING> relationships, INT top_k=5) { 
+-- 根据指定的实体和关系集合，从文档中检索与之相关的内容，并根据相关性得分返回top_k文档片段。
+CREATE DISTRIBUTED QUERY Entity_Relationship_Retrieval(SET<STRING> entities, SET<STRING> relationships, INT top_k=5) {
   SumAccum<INT> @num_touched;
   MapAccum<STRING, MapAccum<STRING, STRING>> @@final_retrieval;
   SetAccum<VERTEX> @@starting_ents;

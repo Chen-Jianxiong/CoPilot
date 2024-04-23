@@ -1,3 +1,4 @@
+-- 定义了一个数据加载作业，旨在从一个 CSV 文件中导入数据到图数据库的顶点和边中。
 CREATE LOADING load_documents_content_csv_@uuid@ {
     DEFINE FILENAME DocumentContent;
     LOAD DocumentContent TO VERTEX Document VALUES($0, gsql_current_time_epoch(0), _, _) USING SEPARATOR="|", HEADER="true", EOL="\n", QUOTE="double";

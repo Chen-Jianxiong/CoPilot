@@ -12,6 +12,7 @@ from app.metrics.tg_proxy import TigerGraphConnectionProxy
 from app.sync.eventual_consistency_checker import EventualConsistencyChecker
 
 logger = logging.getLogger(__name__)
+# 一致性检查dict
 consistency_checkers = {}
 
 
@@ -48,6 +49,7 @@ def get_db_connection(
             apiToken=apiToken,
         )
 
+    # 设置超时时间和响应大小
     conn.customizeHeader(
         timeout=db_config["default_timeout"] * 1000, responseSize=5000000
     )
@@ -57,11 +59,16 @@ def get_db_connection(
 
 
 async def get_eventual_consistency_checker(graphname: str):
+    """获得最终一致性检查器
+    管理和维护在异步数据处理和存储系统中，数据在不同节点间的最终一致性状态。"""
+
     if not db_config.get("enable_consistency_checker", True):
         logger.debug("Eventual consistency checker disabled")
         return
 
+    # 同步间隔（秒）
     check_interval_seconds = milvus_config.get("sync_interval_seconds", 30 * 60)
+    # 获得图数据库的连接
     credentials = HTTPBasicCredentials(
         username=db_config["username"], password=db_config["password"]
     )
@@ -70,6 +77,7 @@ async def get_eventual_consistency_checker(graphname: str):
     if graphname not in consistency_checkers:
         vector_indices = {}
         if milvus_config.get("enabled") == "true":
+            # 设置向量索引
             vertex_field = milvus_config.get("vertex_field", "vertex_id")
             index_names = milvus_config.get(
                 "indexes",
@@ -89,7 +97,9 @@ async def get_eventual_consistency_checker(graphname: str):
                     vertex_field=vertex_field,
                 )
 
+        # 默认就是semantic，选择文档分块器
         if doc_processing_config.get("chunker") == "semantic":
+            # 语义分块
             from app.supportai.chunkers.semantic_chunker import SemanticChunker
 
             chunker = SemanticChunker(
@@ -98,12 +108,14 @@ async def get_eventual_consistency_checker(graphname: str):
                 doc_processing_config["chunker_config"].get("threshold", 0.95),
             )
         elif doc_processing_config.get("chunker") == "regex":
+            # 正则表达式分块
             from app.supportai.chunkers.regex_chunker import RegexChunker
 
             chunker = RegexChunker(
                 pattern=doc_processing_config["chunker_config"].get("pattern", "\\r?\\n")
             )
         elif doc_processing_config.get("chunker") == "character":
+            # 字符分块
             from app.supportai.chunkers.character_chunker import CharacterChunker
 
             chunker = CharacterChunker(
@@ -113,14 +125,14 @@ async def get_eventual_consistency_checker(graphname: str):
         else:
             raise ValueError("Invalid chunker type")
         
-
+        # 选择实体关系提取器
         if doc_processing_config.get("extractor") == "llm":
             from app.supportai.extractors import LLMEntityRelationshipExtractor
             extractor = LLMEntityRelationshipExtractor(get_llm_service(llm_config))
         else:
             raise ValueError("Invalid extractor type")
         
-
+        # 初始化最终一致性检查器
         checker = EventualConsistencyChecker(
             check_interval_seconds,
             graphname,

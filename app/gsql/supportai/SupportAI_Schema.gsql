@@ -1,3 +1,4 @@
+-- 定义了一个schema change job，其主要目的是在图数据库中添加一系列新的顶点类型和边类型。
 CREATE SCHEMA_CHANGE JOB add_supportai_schema {
     ADD VERTEX DocumentChunk(PRIMARY_ID id STRING, idx INT, epoch_added UINT, epoch_processing UINT, epoch_processed UINT) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
     ADD VERTEX Document(PRIMARY_ID id STRING, epoch_added UINT, epoch_processing UINT, epoch_processed UINT) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";

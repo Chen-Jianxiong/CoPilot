@@ -47,9 +47,11 @@ class TigerGraphAgent:
         self.llm = llm_provider
         self.model_name = embedding_model.model_name
 
+        # 先将问题文本映射为图schema模式
         self.mq2s = MapQuestionToSchema(
             self.conn, self.llm.model, self.llm.map_question_schema_prompt
         )
+        # 再根据问题和图schema模式生成函数调用。
         self.gen_func = GenerateFunction(
             self.conn,
             self.llm.model,
@@ -60,9 +62,11 @@ class TigerGraphAgent:
 
         tools = [self.mq2s, self.gen_func]
         logger.debug(f"request_id={req_id_cv.get()} agent tools created")
+        # 会在调用agent()时自动顺序执行tools
         self.agent = initialize_agent(
             tools,
             self.llm.model,
+            # 类型：结构化 zero shot
             agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
             verbose=False,
             return_intermediate_steps=True,
@@ -75,7 +79,7 @@ class TigerGraphAgent:
     def question_for_agent(self, question: str):
         """Question for Agent.
 
-        Ask the agent a question to be answered by the database. Returns the agent resoposne or raises an exception.
+        向代理询问一个由数据库回答的问题。返回代理响应或引发异常。
 
         Args:
             question (str):
@@ -89,6 +93,7 @@ class TigerGraphAgent:
             logger.debug_pii(
                 f"request_id={req_id_cv.get()} question_for_agent question={question}"
             )
+            # 调用代理处理问题
             resp = self.agent({"input": question})
             LogWriter.info(f"request_id={req_id_cv.get()} EXIT question_for_agent")
             return resp

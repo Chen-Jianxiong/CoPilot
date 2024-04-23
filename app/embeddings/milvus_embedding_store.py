@@ -85,6 +85,8 @@ class MilvusEmbeddingStore(EmbeddingStore):
         return utility.has_collection(self.collection_name, using=self.milvus_alias)
 
     def load_documents(self):
+        """初始化一个Milvus数据库，并从文件系统中加载文档到数据库中。"""
+
         if not self.check_collection_exists():
             from langchain.document_loaders import DirectoryLoader, JSONLoader
 
@@ -133,7 +135,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
         metadatas: List[dict] = None,
     ):
         """Add Embeddings.
-        Add embeddings to the Embedding store.
+        将嵌入添加到嵌入存储中。
         Args:
             embeddings (Iterable[Tuple[str, List[float]]]):
                 Iterable of content and embedding of the document.
@@ -145,7 +147,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
             if metadatas is None:
                 metadatas = []
 
-            # add fields required by Milvus if they do not exist
+                # 如果Milvus需要的字段不存在，则添加这些字段默认值
             if self.support_ai_instance:
                 for metadata in metadatas:
                     if self.vertex_field not in metadata:
@@ -160,14 +162,17 @@ class MilvusEmbeddingStore(EmbeddingStore):
             LogWriter.info(
                 f"request_id={req_id_cv.get()} Milvus ENTRY add_embeddings()"
             )
+            # 文档描述字符文本
             texts = [text for text, _ in embeddings]
 
             operation_type = "add_texts"
+            # 增加指标
             metrics.milvus_query_total.labels(
                 self.collection_name, operation_type
             ).inc()
             start_time = time()
 
+            # 注册到Milvus
             added = self.milvus.add_texts(texts=texts, metadatas=metadatas)
 
             duration = time() - start_time
@@ -198,6 +203,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
         embeddings: Iterable[Tuple[str, List[float]]],
         metadatas: Optional[List[dict]] = None,
     ):
+        """将嵌入更新到嵌入存储中。"""
         try:
             LogWriter.info(
                 f"request_id={req_id_cv.get()} Milvus ENTRY upsert_document()"
@@ -223,9 +229,9 @@ class MilvusEmbeddingStore(EmbeddingStore):
 
             documents = []
 
-            # Iterate over embeddings and metadatas simultaneously
+            # 同时迭代嵌入和元数据
             for (text, embedding), metadata in zip(embeddings, metadatas or []):
-                # Create a document with text as page content
+                # 创建一个以文本作为页面内容的文档
                 document = Document(page_content=text)
 
                 # Add embedding to metadata
@@ -239,7 +245,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 # Append document to the list
                 documents.append(document)
 
-            # Perform upsert operation
+            # 执行逆操作
             operation_type = "upsert"
             if id is not None and id.strip():
                 LogWriter.info(f"id: {id}")
@@ -250,6 +256,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 ).inc()
                 start_time = time()
 
+                # 更新插入
                 upserted = self.milvus.upsert(ids=[int(id)], documents=documents)
 
                 duration = time() - start_time
@@ -302,15 +309,16 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 LogWriter.info(f"request_id={req_id_cv.get()} Milvus EXIT delete()")
                 return f"Milvus collection {self.collection_name} does not exist"
 
-            # Check if ids or expr are provided
+            # 检查是否提供了id或expr
             if ids is None and expr is None:
                 raise ValueError("Either id string or expr string must be provided.")
 
-            # Perform deletion based on provided IDs or expression
+            # 根据提供的id或表达式执行删除
             if expr:
                 # Delete by expression
                 start_time = time()
                 metrics.milvus_query_total.labels(self.collection_name, "delete").inc()
+                # 删除
                 deleted = self.milvus.delete(expr=expr)
                 end_time = time()
                 metrics.milvus_query_duration_seconds.labels(
@@ -322,6 +330,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 # Delete by ids
                 start_time = time()
                 metrics.milvus_query_total.labels(self.collection_name, "delete").inc()
+                # 删除
                 deleted = self.milvus.delete(ids=ids)
                 end_time = time()
                 metrics.milvus_query_duration_seconds.labels(
@@ -348,7 +357,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
 
     def retrieve_similar(self, query_embedding, top_k=10):
         """Retireve Similar.
-        Retrieve similar embeddings from the vector store given a query embedding.
+        从给定查询嵌入的向量存储中检索topK相似的嵌入。
         Args:
             query_embedding (List[float]):
                 The embedding to search with.
@@ -367,6 +376,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
             metrics.milvus_query_total.labels(
                 self.collection_name, "similarity_search_by_vector"
             ).inc()
+            # 开始检索
             similar = self.milvus.similarity_search_by_vector(
                 embedding=query_embedding, k=top_k
             )
@@ -379,7 +389,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
             logger.debug(
                 f"request_id={req_id_cv.get()} Milvus similarity_search_by_vector() retrieved={sim_ids}"
             )
-            # Convert pk from int to str for each document
+            # 将每个文档的pk从int转换为str
             for doc in similar:
                 doc.metadata["pk"] = str(doc.metadata["pk"])
             LogWriter.info(
@@ -411,6 +421,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
                 query_params["milvus_host"] = f"{method}://{user}:{pwd}@{host}"
             else:
                 query_params["milvus_host"] = self.milvus_connection.get("uri", "")
+            # TODO: 局部变量'host'可能在赋值前被引用，需要更改
             query_params["milvus_port"] = int(host.split(":")[-1])
         else:
             if self.milvus_connection.get("user", "") != "":

@@ -1,6 +1,6 @@
 import uuid
 
-
+"""存储session信息"""
 class Session:
     def __init__(self, session_id, user_id, db_conn):
         self.session_id = session_id

@@ -1,4 +1,6 @@
-CREATE DISTRIBUTED QUERY Build_Concept_Tree(INT min_cooccurence=10) { 
+-- 通过分析概念之间的共现频率来构建概念树。
+-- 主要用于连接共现次数达到指定阈值的概念，形成新的概念节点，并将这些新节点以层级关系添加到现有的概念树中。
+CREATE DISTRIBUTED QUERY Build_Concept_Tree(INT min_cooccurence=10) {
   MapAccum<STRING, SumAccum<INT>> @concept_cooccurence;
   SetAccum<VERTEX<Concept>> @@unmerged_concepts;
   SetAccum<STRING> @source_concepts;

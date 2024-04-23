@@ -2,6 +2,7 @@ from app.supportai.chunkers.base_chunker import BaseChunker
 
 
 class CharacterChunker(BaseChunker):
+    """ 字符分割器 """
     def __init__(self, chunk_size, overlap_size=0):
         if chunk_size <= overlap_size:
             raise ValueError("Chunk size must be larger than overlap size")

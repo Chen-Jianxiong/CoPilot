@@ -1,1 +1,2 @@
+-- 在图数据库环境中注册一个外部数据源，使其可用于之后的数据加载或集成任务。
 CREATE DATA_SOURCE @source_name@ = """@source_config@"""

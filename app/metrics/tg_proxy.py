@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class TigerGraphConnectionProxy:
     def __init__(self, tg_connection: TigerGraphConnection):
         self._tg_connection = tg_connection
+        # 活动连接指标计数
         metrics.tg_active_connections.inc()
 
     def __getattr__(self, name):
@@ -29,6 +30,7 @@ class TigerGraphConnectionProxy:
             return original_attr
 
     def _runInstalledQuery(self, query_name, params):
+        """runInstalledQuery的代理方法，用于记录查询执行时间和状态。"""
         start_time = time.time()
         metrics.tg_inprogress_requests.labels(query_name=query_name).inc()
         try:

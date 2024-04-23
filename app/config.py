@@ -22,11 +22,12 @@ from app.session import SessionHandler
 from app.status import StatusManager
 from app.tools.logwriter import LogWriter
 
+# HTTPBasic认证
 security = HTTPBasic()
 session_handler = SessionHandler()
 status_manager = StatusManager()
 
-# Configs
+# 获取环境变量配置
 LLM_SERVICE = os.getenv("LLM_CONFIG", "configs/llm_config.json")
 DB_CONFIG = os.getenv("DB_CONFIG", "configs/db_config.json")
 MILVUS_CONFIG = os.getenv("MILVUS_CONFIG", "configs/milvus_config.json")
@@ -34,6 +35,7 @@ DOC_PROCESSING_CONFIG = os.getenv(
     "DOC_PROCESSING_CONFIG", "configs/doc_processing_config.json"
 )
 PATH_PREFIX = os.getenv("PATH_PREFIX", "")
+# 将环境变量的字符串值转换为布尔值
 PRODUCTION = os.getenv("PRODUCTION", "false").lower() == "true"
 
 if not PATH_PREFIX.startswith("/") and len(PATH_PREFIX) != 0:
@@ -70,9 +72,8 @@ else:
     with open(DB_CONFIG, "r") as f:
         db_config = json.load(f)
 
-
 if MILVUS_CONFIG is None or (
-    MILVUS_CONFIG.endswith(".json") and not os.path.exists(MILVUS_CONFIG)
+        MILVUS_CONFIG.endswith(".json") and not os.path.exists(MILVUS_CONFIG)
 ):
     milvus_config = {"host": "localhost", "port": "19530", "enabled": "false"}
 elif MILVUS_CONFIG.endswith(".json"):
@@ -86,8 +87,7 @@ else:
             "MILVUS_CONFIG must be a .json file or a JSON string, failed with error: "
             + str(e)
         )
-
-
+# 根据llm_config.json创建相应的embeddings，一个EmbeddingModel类，它连接到外部嵌入API服务。
 if llm_config["embedding_service"]["embedding_model_service"].lower() == "openai":
     embedding_service = OpenAI_Embedding(llm_config["embedding_service"])
 elif llm_config["embedding_service"]["embedding_model_service"].lower() == "azure":
@@ -115,6 +115,7 @@ def get_llm_service(llm_config):
         raise Exception("LLM Completion Service Not Supported")
 
 
+# 一个EmbeddingStore类，它连接到一个嵌入库来检索pyTigerGraph和自定义查询文档。
 embedding_store = FAISS_EmbeddingStore(embedding_service)
 
 if milvus_config.get("enabled") == "true":
@@ -155,10 +156,9 @@ if milvus_config.get("enabled") == "true":
         alias=milvus_config.get("alias", "default"),
     )
 
-
 if DOC_PROCESSING_CONFIG is None or (
-    DOC_PROCESSING_CONFIG.endswith(".json")
-    and not os.path.exists(DOC_PROCESSING_CONFIG)
+        DOC_PROCESSING_CONFIG.endswith(".json")
+        and not os.path.exists(DOC_PROCESSING_CONFIG)
 ):
     doc_processing_config = {
         "chunker": "semantic",

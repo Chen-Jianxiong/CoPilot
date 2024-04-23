@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY Build_Relationship_Concepts(INT occurence_min=5) { 
+-- 分析和处理图中的 Relationship 顶点，以创建和记录那些出现频率超过指定阈值的关系概念节点。
+CREATE DISTRIBUTED QUERY Build_Relationship_Concepts(INT occurence_min=5) {
   MapAccum<STRING, SumAccum<INT>> @@relationship_count;
   SetAccum<STRING> @@impt_relationships;
   SetAccum<STRING> @@created_concepts;

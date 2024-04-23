@@ -8,6 +8,7 @@ from typing import List, Dict, Type
 
 
 class MapQuestionToSchemaResponse(BaseModel):
+    """自定义类型"""
     question: str = Field(
         description="The question restated in terms of the graph schema"
     )

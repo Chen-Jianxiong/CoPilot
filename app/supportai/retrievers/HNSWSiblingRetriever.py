@@ -11,7 +11,9 @@ class HNSWSiblingRetriever(BaseRetriever):
         connection: TigerGraphConnectionProxy,
     ):
         super().__init__(embedding_service, embedding_store, llm_service, connection)
+        # 子查询函数，主要用于执行基于 Milvus 的高效向量搜索，找出与给定查询向量最相似的顶点集合。
         self._check_query_install("HNSW_Search_Sub")
+        # 通过 HNSW 算法在给定的向量空间中执行高效的近邻搜索，探索相关的内容块，并跟踪和展示顶点之间的关系及内容。
         self._check_query_install("HNSW_Chunk_Sibling_Search")
 
     def search(self, question, index, top_k=1, lookback=3, lookahead=3, withHyDE=False):

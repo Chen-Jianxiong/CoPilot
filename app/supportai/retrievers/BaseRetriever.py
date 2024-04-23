@@ -33,9 +33,10 @@ class BaseRetriever:
         return res
 
     def _check_query_install(self, query_name):
+        # 在数据库中安装查询
         endpoints = self.conn.getEndpoints(
             dynamic=True
-        )  # installed queries in database
+        )
         installed_queries = [q.split("/")[-1] for q in endpoints]
 
         if query_name not in installed_queries:
@@ -45,11 +46,13 @@ class BaseRetriever:
 
     def _generate_response(self, question, retrieved):
         model = self.llm_service.llm
+        # 创建ChatGPT 提示模版
         prompt = self.llm_service.supportai_response_prompt
 
         prompt = ChatPromptTemplate.from_template(prompt)
+        # 定义输出解析器
         output_parser = StrOutputParser()
-
+        # 构建了一个管道（Pipeline）对象，将提示模板、语言模型和输出解析器连接在一起
         chain = prompt | model | output_parser
 
         generated = chain.invoke({"question": question, "sources": retrieved})
@@ -65,6 +68,7 @@ class BaseRetriever:
         )
 
     def _hyde_embedding(self, text) -> str:
+        """ 使用HyDE嵌入回答问题，返回嵌入结果 """
         model = self.llm_service.llm
         prompt = self.llm_service.hyde_prompt
 

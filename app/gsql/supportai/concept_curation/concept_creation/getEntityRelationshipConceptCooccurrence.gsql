@@ -1,3 +1,5 @@
+-- 识别两个概念（c1 和 c2）在图中的共现关系。
+-- 这涉及到探索和分析两个概念的关联路径和可能的共同实体或关系，进而判定它们在图中的关系网络结构。
 CREATE QUERY getEntityRelationshipConceptCooccurrence(VERTEX<Concept> c1, VERTEX<Concept> c2) RETURNS(INT){
   SetAccum<VERTEX<Concept>> @@initialCo, @@coLeafs, @@tempCo;
   OrAccum @visited, @excludeCo, @@exclude;

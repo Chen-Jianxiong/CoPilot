@@ -22,22 +22,31 @@ from app.supportai.retrievers import (EntityRelationshipRetriever,
 from app.supportai.supportai_ingest import BatchIngestion
 from app.util import get_db_connection, get_eventual_consistency_checker
 
+"""
+开发中，即将发布 alpha 版本
+摄取一组文档，从信息中提取知识图，并通过自然语言查询实现文档和图数据的混合搜索。
+此功能将利用图形数据丰富 RAG（检索增强生成）管道，从而能够对用户查询做出更准确、信息更丰富的响应。 
+"""
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["SupportAI"])
 
 
 @router.post("/{graphname}/supportai/initialize")
 def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_connection)):
-    # need to open the file using the absolute path
+    """ 读取gsql文件，并使用conn.gsql()执行gsql文件中的语句。以初始化supportai """
+    # 需要使用绝对路径打开文件
+    # 定义了一个schema change job，其主要目的是在图数据库中添加一系列新的顶点类型和边类型。
     file_path = "app/gsql/supportai/SupportAI_Schema.gsql"
     with open(file_path, "r") as f:
         schema = f.read()
+    # 运行一个名为add_supportai_schema的schema变更job。
     schema_res = conn.gsql(
         """USE GRAPH {}\n{}\nRUN SCHEMA_CHANGE JOB add_supportai_schema""".format(
             graphname, schema
         )
     )
 
+    # 在多个顶点类型上添加索引，以优化基于时间戳字段的查询性能。
     file_path = "app/gsql/supportai/SupportAI_IndexCreation.gsql"
     with open(file_path) as f:
         index = f.read()
@@ -47,6 +56,7 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
         )
     )
 
+    # 扫描指定类型的顶点，并根据它们的时间戳属性确定哪些顶点需要处理或更新；同时提取这些顶点的相关文本或定义
     file_path = "app/gsql/supportai/Scan_For_Updates.gsql"
     with open(file_path) as f:
         scan_for_updates = f.read()
@@ -58,6 +68,7 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
         + "\n INSTALL QUERY Scan_For_Updates"
     )
 
+    # 分布式查询，更新一组特定顶点的处理状态。修改这些顶点的时间戳属性，标记它们为已处理状态。
     file_path = "app/gsql/supportai/Update_Vertices_Processing_Status.gsql"
     with open(file_path) as f:
         update_vertices = f.read()
@@ -70,7 +81,8 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
     )
 
     return {
-        "host_name": conn._tg_connection.host,  # include host_name for debugging from client. Their pyTG conn might not have the same host as what's configured in copilot
+        # 包括host_name以便从客户端进行调试。它们的pyTG conn可能与在copilot中配置的主机不同
+        "host_name": conn._tg_connection.host,
         "schema_creation_status": json.dumps(schema_res),
         "index_creation_status": json.dumps(index_res),
     }
@@ -80,11 +92,16 @@ def initialize(graphname, conn: TigerGraphConnectionProxy = Depends(get_db_conne
 def create_ingest(
     graphname,
     ingest_config: CreateIngestConfig,
+    # 后台任务集合
     background_tasks: BackgroundTasks,
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ):
+    """ 摄取文档前的准备工作 """
+
+    # 添加一个在发送响应后在后台调用的函数（最终一致性检查器）。
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
     if ingest_config.file_format.lower() == "json":
+        # 定义了一个数据加载作业，用于从 JSON 格式的文件中导入数据到图数据库中的顶点和边。
         file_path = "app/gsql/supportai/SupportAI_InitialLoadJSON.gsql"
 
         with open(file_path) as f:
@@ -96,6 +113,7 @@ def create_ingest(
         ingest_template = ingest_template.replace('"content"', '"{}"'.format(doc_text))
 
     if ingest_config.file_format.lower() == "csv":
+        # 定义了一个数据加载作业，旨在从一个 CSV 文件中导入数据到图数据库的顶点和边中。
         file_path = "app/gsql/supportai/SupportAI_InitialLoadCSV.gsql"
 
         with open(file_path) as f:
@@ -110,18 +128,18 @@ def create_ingest(
         ingest_template = ingest_template.replace('"\\n"', '"{}"'.format(eol))
         ingest_template = ingest_template.replace('"double"', '"{}"'.format(quote))
 
+    # 在图数据库环境中注册一个外部数据源，使其可用于之后的数据加载或集成任务。
     file_path = "app/gsql/supportai/SupportAI_DataSourceCreation.gsql"
 
     with open(file_path) as f:
         data_stream_conn = f.read()
 
-    # assign unique identifier to the data stream connection
-
+    # 为数据流连接分配唯一标识符
     data_stream_conn = data_stream_conn.replace(
         "@source_name@", "SupportAI_" + graphname + "_" + str(uuid.uuid4().hex)
     )
 
-    # check the data source and create the appropriate connection
+    # 检查数据源并创建适当的连接
     if ingest_config.data_source.lower() == "s3":
         data_conn = ingest_config.data_source_config
         if (
@@ -146,10 +164,10 @@ def create_ingest(
                 "account.key": ingest_config.data_source_config["account_key"],
             }
         elif ingest_config.data_source_config.get("client_id") is not None:
-            # verify that the client secret is also provided
+            # 验证是否还提供了客户端密钥
             if ingest_config.data_source_config.get("client_secret") is None:
                 raise Exception("Client secret not provided")
-            # verify that the tenant id is also provided
+            # 验证是否还提供了租户id
             if ingest_config.data_source_config.get("tenant_id") is None:
                 raise Exception("Tenant id not provided")
             connector = {
@@ -164,7 +182,7 @@ def create_ingest(
             "@source_config@", json.dumps(connector)
         )
     elif ingest_config.data_source.lower() == "gcs":
-        # verify that the correct fields are provided
+        # 验证是否提供了正确的字段
         if ingest_config.data_source_config.get("project_id") is None:
             raise Exception("Project id not provided")
         if ingest_config.data_source_config.get("private_key_id") is None:
@@ -213,6 +231,7 @@ def ingest(
     background_tasks: BackgroundTasks,
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ):
+    # 添加一个在发送响应后在后台调用的函数（最终一致性检查器）。
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
     if loader_info.file_path is None:
         raise Exception("File path not provided")
@@ -222,6 +241,7 @@ def ingest(
         raise Exception("Data source id not provided")
 
     try:
+        # 加载作业
         res = conn.gsql(
             'USE GRAPH {}\nRUN LOADING JOB -noprint {} USING {}="{}"'.format(
                 graphname,
@@ -259,8 +279,12 @@ async def search(
     background_tasks: BackgroundTasks,
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ):
+    """
+    搜索，使用llm从提问中提取实体关系，格式化、过滤类型，再由tg执行相关性得分过滤top_K
+    """
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
     if query.method.lower() == "hnswoverlap":
+        # 创建基于 HNSW 索引的 overlap 搜索对象
         retriever = HNSWOverlapRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
@@ -274,6 +298,7 @@ async def search(
     elif query.method.lower() == "vdb":
         if "index" not in query.method_params:
             raise Exception("Index name not provided")
+        # 创建基于 HNSW 索引的搜索对象
         retriever = HNSWRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
@@ -281,11 +306,13 @@ async def search(
             query.question,
             query.method_params["index"],
             query.method_params["top_k"],
+            # 是否使用 HyDE 方法
             query.method_params["withHyDE"],
         )
     elif query.method.lower() == "sibling":
         if "index" not in query.method_params:
             raise Exception("Index name not provided")
+        # 创建基于 HNSW 索引的 Sibling 搜索对象
         retriever = HNSWSiblingRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
@@ -298,9 +325,11 @@ async def search(
             query.method_params["withHyDE"],
         )
     elif query.method.lower() == "entityrelationship":
+        # 实体关系检索器
         retriever = EntityRelationshipRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
+        # 执行检索，使用llm从提问中提取实体关系，格式化、过滤类型，再由tg执行查询语句检索top_K
         res = retriever.search(query.question, query.method_params["top_k"])
 
     return res
@@ -313,13 +342,18 @@ async def answer_question(
     background_tasks: BackgroundTasks,
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ):
+    """
+    与search相同的执行，在其结果上由llm生成回答
+    """
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
     resp = CoPilotResponse
     resp.response_type = "supportai"
     if query.method.lower() == "hnswoverlap":
+        # 基于 HNSW 索引的 overlap 搜索。
         retriever = HNSWOverlapRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
+        # 先在图中搜索，再由llm生成回答
         res = retriever.retrieve_answer(
             query.question,
             query.method_params["indices"],
@@ -330,6 +364,7 @@ async def answer_question(
     elif query.method.lower() == "vdb":
         if "index" not in query.method_params:
             raise Exception("Index name not provided")
+        # 基于 HNSW 索引的搜索。
         retriever = HNSWRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
@@ -345,6 +380,7 @@ async def answer_question(
         retriever = HNSWSiblingRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
+        # 先在图中搜索，再由llm生成回答
         res = retriever.retrieve_answer(
             query.question,
             query.method_params["index"],
@@ -354,9 +390,11 @@ async def answer_question(
             query.method_params["withHyDE"],
         )
     elif query.method.lower() == "entityrelationship":
+        # 实体关系检索器
         retriever = EntityRelationshipRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
+        # 先使用llm提取关系实体，并过滤，再由llm生成回答
         res = retriever.retrieve_answer(query.question, query.method_params["top_k"])
     else:
         raise Exception("Method not implemented")
@@ -373,13 +411,21 @@ async def build_concepts(
     background_tasks: BackgroundTasks,
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ):
+    """
+    创建相关概念
+    """
+
     background_tasks.add_task(get_eventual_consistency_checker, graphname)
+    # 边
     rels_concepts = RelationshipConceptCreator(conn, llm_config, embedding_service)
     rels_concepts.create_concepts()
+    # 点
     ents_concepts = EntityConceptCreator(conn, llm_config, embedding_service)
     ents_concepts.create_concepts()
+    # 社区
     comm_concepts = CommunityConceptCreator(conn, llm_config, embedding_service)
     comm_concepts.create_concepts()
+    # 共现关系、概念树
     high_level_concepts = HigherLevelConceptCreator(conn, llm_config, embedding_service)
     high_level_concepts.create_concepts()
 
@@ -390,5 +436,8 @@ async def build_concepts(
 async def force_update(
     graphname: str, conn: TigerGraphConnectionProxy = Depends(get_db_connection)
 ):
+    """
+    强制更新，执行最终一次性检查器
+    """
     await get_eventual_consistency_checker(graphname)
     return {"status": "success"}

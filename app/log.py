@@ -93,4 +93,5 @@ for p in log_file_paths.values():
 logging.basicConfig(level=LOGLEVEL, handlers=handlers)
 
 
+# # 请求上下文变量，其值是请求的uuid
 req_id_cv = contextvars.ContextVar("req_id", default=None)

@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY Build_Entity_Concepts(/* Parameters here */) { 
+-- 创建与现有关系概念相关联的新实体概念，并建立相应的关系和描述。
+CREATE DISTRIBUTED QUERY Build_Entity_Concepts(/* Parameters here */) {
   ListAccum<STRING> @rel_concepts;
   cpts = {Concept.*};
   

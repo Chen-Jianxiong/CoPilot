@@ -19,7 +19,11 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
         self.strict_mode = strict_mode
 
     def _extract_kg_from_doc(self, doc, chain, parser):
+        """
+        使用llm提取文档中的实体关系，并格式化、过滤
+        """
         try:
+            # 调用模型进行实体关系提取
             out = chain.invoke(
                 {"input": doc, "format_instructions": parser.get_format_instructions()}
             )
@@ -27,6 +31,7 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
             print("Error: ", e)
             return {"nodes": [], "rels": []}
         try:
+            # 提取加载json文件
             if "```json" not in out.content:
                 json_out = json.loads(out.content.strip("content="))
             else:
@@ -35,6 +40,7 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
                 )
 
             formatted_rels = []
+            # 格式化关系
             for rels in json_out["rels"]:
                 if isinstance(rels["source"], str) and isinstance(rels["target"], str):
                     formatted_rels.append(
@@ -80,6 +86,7 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
                     )
                 else:
                     raise Exception("Relationship parsing error")
+            # 格式化节点
             formatted_nodes = []
             for node in json_out["nodes"]:
                 formatted_nodes.append(
@@ -90,7 +97,7 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
                     }
                 )
 
-            # filter relationships and nodes based on allowed types
+            # 根据允许的类型过滤关系和节点
             if self.strict_mode:
                 if self.allowed_vertex_types:
                     formatted_nodes = [
@@ -109,11 +116,17 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
             print("Error Processing: ", out)
         return {"nodes": [], "rels": []}
 
+
     def document_er_extraction(self, document):
+        """
+        从文档中提取实体关系
+        """
         from langchain.prompts import ChatPromptTemplate
         from langchain.output_parsers import PydanticOutputParser
 
+        # 实体关系解析器
         parser = PydanticOutputParser(pydantic_object=KnowledgeGraph)
+        # 设置Prompt
         prompt = [
             ("system", self.llm_service.entity_relationship_extraction_prompt),
             (
@@ -128,6 +141,7 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
                 "Mandatory: Make sure to answer in the correct format, specified here: {format_instructions}",
             ),
         ]
+        # 添加点边类型
         if self.allowed_vertex_types or self.allowed_edge_types:
             prompt.append(
                 (
@@ -140,8 +154,10 @@ class LLMEntityRelationshipExtractor(BaseExtractor):
             prompt.append(("human", f"Allowed Node Types: {self.allowed_vertex_types}"))
         if self.allowed_edge_types:
             prompt.append(("human", f"Allowed Edge Types: {self.allowed_edge_types}"))
+        # 创建聊天提示模板。
         prompt = ChatPromptTemplate.from_messages(prompt)
         chain = prompt | self.llm_service.model  # | parser
+        # 从json文档中提取实体关系
         er = self._extract_kg_from_doc(document, chain, parser)
         return er
 

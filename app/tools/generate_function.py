@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class GenerateFunction(BaseTool):
     """GenerateFunction Tool.
-    Tool to generate and execute the appropriate function call for the question.
+    为问题生成和执行 适当函数调用 的工具。
     """
 
     name = "GenerateFunction"
@@ -105,6 +105,7 @@ class GenerateFunction(BaseTool):
             )
             return e
 
+        # 根据提供的点边的信息，增强原始问题字符串，用于后续的文档检索。
         lookup_question = question + " "
         if target_vertex_types != []:
             lookup_question += "using vertices: " + str(target_vertex_types) + " "
@@ -114,8 +115,9 @@ class GenerateFunction(BaseTool):
         logger.debug_pii(
             f"request_id={req_id_cv.get()} retrieving documents for question={lookup_question}"
         )
+        # 创建动态输出解析器，用于解析LLM的输出
         func_parser = PydanticOutputParser(pydantic_object=GenerateFunctionResponse)
-
+        # 初始化问题的模板
         PROMPT = PromptTemplate(
             template=self.prompt,
             input_variables=[
@@ -134,6 +136,7 @@ class GenerateFunction(BaseTool):
             },
         )
 
+        # 在嵌入存储（embedding store）中检索与该问题最相关tok_k个的文档。
         docs = self.embedding_store.retrieve_similar(
             self.embedding_model.embed_query(lookup_question), top_k=3
         )
@@ -160,12 +163,15 @@ class GenerateFunction(BaseTool):
         logger.debug(f"request_id={req_id_cv.get()} retrieved documents={doc_ids}")
 
         chain = LLMChain(llm=self.llm, prompt=PROMPT)
+        # 使用 LLMChain，结合提供的提示模板和上面收集的数据，将问题转化为函数调用。
         generated = chain.apply(inputs)[0]["text"]
         logger.debug(f"request_id={req_id_cv.get()} generated function")
+        # 解析生成的结果
         generated = func_parser.invoke(generated)
         #LogWriter.info(f"generated_function: {generated}")
 
         try:
+            # 验证，获取调用名
             parsed_func = validate_function_call(
                 self.conn, generated.connection_func_call, docs
             )
@@ -179,6 +185,7 @@ class GenerateFunction(BaseTool):
             loc = {}
             exec("res = conn." + parsed_func, {"conn": self.conn}, loc)
             LogWriter.info(f"request_id={req_id_cv.get()} EXIT GenerateFunction._run()")
+            # 定义返回格式对象
             return {
                 "function_call": parsed_func,
                 "result": json.dumps(loc["res"]),

@@ -1,3 +1,4 @@
+-- 定义了一个数据加载作业，用于从 JSON 格式的文件中导入数据到图数据库中的顶点和边。
 CREATE LOADING JOB load_documents_content_json_@uuid@ {
     DEFINE FILENAME DocumentContent;
     LOAD DocumentContent TO VERTEX Document VALUES($"doc_id", gsql_current_time_epoch(0), _, _) USING JSON_FILE="true";

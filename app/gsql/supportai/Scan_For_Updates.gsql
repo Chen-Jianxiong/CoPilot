@@ -1,3 +1,4 @@
+-- 扫描指定类型的顶点，并根据它们的时间戳属性确定哪些顶点需要处理或更新；同时提取这些顶点的相关文本或定义
 CREATE DISTRIBUTED QUERY Scan_For_Updates(STRING v_type = "Document",
                                           UINT expire_window=3600,
                                           UINT num_samples = 10) { 

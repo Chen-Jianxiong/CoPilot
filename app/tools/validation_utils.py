@@ -24,6 +24,7 @@ class InvalidFunctionCallException(Exception):
 
 
 def validate_schema(conn, v_types, e_types, v_attrs, e_attrs):
+    """验证LLM生成后的点边格式是否正确"""
     LogWriter.info(f"request_id={req_id_cv.get()} ENTRY validate_schema()")
     vertices = conn.getVertexTypes()
     edges = conn.getEdgeTypes()
@@ -71,15 +72,18 @@ def validate_schema(conn, v_types, e_types, v_attrs, e_attrs):
 
 
 def validate_function_call(conn, generated_call: str, retrieved_docs: list) -> str:
+    """验证调用语句的正确性，返回函数名"""
     # handle installed queries
     LogWriter.info(f"request_id={req_id_cv.get()} ENTRY validate_function_call()")
     generated_call = generated_call.strip().strip("\n").strip("\t")
     # LogWriter.info(f"generated_call: {generated_call}")
     valid_headers = [doc.metadata.get("function_header") for doc in retrieved_docs]
     # LogWriter.info(f"valid_headers: {valid_headers}")
-    endpoints = conn.getEndpoints(dynamic=True)  # installed queries in database
+    # 在数据库中安装查询
+    endpoints = conn.getEndpoints(dynamic=True)
     installed_queries = [q.split("/")[-1] for q in endpoints]
 
+    # 截取函数名
     if "runInstalledQuery(" == generated_call[:18]:
         query_name = (
             generated_call.split(",")[0].split("runInstalledQuery(")[1].strip("'")

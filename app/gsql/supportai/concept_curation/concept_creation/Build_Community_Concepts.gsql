@@ -1,3 +1,5 @@
+-- 识别图中的社群，并基于这些社群创建新的概念顶点。
+-- 专门用于处理图中的顶点，将它们按连通组件分组，然后根据组件大小和类型创建相应的概念顶点，并建立相应的关系。
 CREATE DISTRIBUTED QUERY Build_Community_Concepts (SET<STRING> v_type_set, SET<STRING> e_type_set, INT min_comm_size, INT max_comm_size)  SYNTAX V1 {
 MinAccum<INT> @min_cc_id = 0;       //each vertex's tentative component id
 MapAccum<INT, INT> @@comp_sizes_map;

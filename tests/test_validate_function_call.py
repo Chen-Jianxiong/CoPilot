@@ -51,6 +51,7 @@ class TestValidateFunctionCall(unittest.TestCase):
         doc2 = Document(
             page_content="`getVertices(vertexType: str, where: str = '', limit: Union[int, str] = None, sort: str = '')` → dict\nRetrieves vertices of the given vertex type...",
             metadata={
+                # 该函数的部分结构信息
                 "source": "./app/pytg_documents/get_vertices.json",
                 "seq_num": 1,
                 "function_header": "getVertices",

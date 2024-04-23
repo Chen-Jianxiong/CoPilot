@@ -89,7 +89,7 @@ class LogWriter:
     @staticmethod
     def initialize_logger():
         if not LogWriter.logger_initialized:
-            # Set log directory, dependending on configuration
+            # 根据配置设置日志目录
             log_directory = log_config.get("log_file_path", "/tmp/logs")
             os.makedirs(log_directory, exist_ok=True)
 
@@ -159,9 +159,12 @@ class LogWriter:
 
     @staticmethod
     def audit_log(message: dict, mask_pii=True):
+        """审计日志，mask_pii：是否对敏感信息进行掩码"""
+        # 初始化日志记录器。
         LogWriter.initialize_logger()
 
         if mask_pii:
+            # 对字典message中的字符串类型的值进行敏感信息掩码。
             masked_message = {
                 k: LogWriter.mask_pii(v) if isinstance(v, str) else v
                 for k, v in message.items()

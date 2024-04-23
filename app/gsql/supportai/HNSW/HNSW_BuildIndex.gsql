@@ -1,3 +1,7 @@
+/*
+基于提供的顶点类型和向量信息，构建一个 HNSW 索引。
+HNSW 索引是一种高效的近似最近邻搜索算法，常用于实现快速的向量搜索。
+*/
 CREATE QUERY HNSW_BuildIndex(
   STRING index_name,
   SET<STRING> v_types,

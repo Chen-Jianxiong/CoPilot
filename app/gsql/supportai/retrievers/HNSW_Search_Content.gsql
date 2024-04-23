@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY HNSW_Search_Content(STRING v_type, STRING milvus_host, 
+-- 利用 Milvus 进行高效的向量搜索，从而检索与给定查询向量相似的顶点，接着进一步提取和返回这些顶点相关联的内容或定义信息。
+CREATE DISTRIBUTED QUERY HNSW_Search_Content(STRING v_type, STRING milvus_host,
   UINT milvus_port, STRING collection_name, STRING vector_field_name, 
   STRING vertex_id_field_name, STRING metric_type="L2", INT top_k=5, STRING query_vector_as_string) { 
   SetAccum<VERTEX> @@start_set;

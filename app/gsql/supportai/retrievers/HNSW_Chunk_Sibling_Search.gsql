@@ -1,4 +1,5 @@
-CREATE DISTRIBUTED QUERY HNSW_Chunk_Sibling_Search(STRING v_type, STRING milvus_host, 
+-- 通过 HNSW 算法在给定的向量空间中执行高效的近邻搜索，探索相关的内容块，并跟踪和展示顶点之间的关系及内容。
+CREATE DISTRIBUTED QUERY HNSW_Chunk_Sibling_Search(STRING v_type, STRING milvus_host,
   UINT milvus_port, STRING collection_name, STRING vector_field_name, 
   STRING vertex_id_field_name, STRING metric_type="L2",  STRING query_vector_as_string, UINT top_k=5, UINT lookback=3, INT lookahead=3) { 
   MapAccum<VERTEX, INT> @distances;

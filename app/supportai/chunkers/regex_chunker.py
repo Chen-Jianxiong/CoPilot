@@ -4,6 +4,7 @@ from typing import List
 
 
 class RegexChunker(BaseChunker):
+    """ 正则分割器 """
     def __init__(self, pattern: str):
         super().__init__()
         self.pattern = re.compile(pattern)

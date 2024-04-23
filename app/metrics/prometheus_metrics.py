@@ -2,6 +2,7 @@ from prometheus_client import Gauge, Histogram, Counter
 
 
 class SingletonMeta(type):
+    """单例模式元类"""
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
@@ -11,9 +12,13 @@ class SingletonMeta(type):
 
 
 class PrometheusMetrics(metaclass=SingletonMeta):
+    """收集和发射TigerGraph、LLM模型（语言模型）和Milvus等库的指标。
+    设置为单例类metaclass=SingletonMeta，确保只能被创建一次"""
     def __init__(self):
+        # 如果还没被初始化
         if not hasattr(self, "initialized"):
-            # collect metrics for TigerGraph
+            # 定义一系列用于收集指标的Prometheus库对象
+            # 收集TigerGraph的指标
             self.tg_active_connections = Gauge(
                 "tg_active_connections", "Number of active connections to TigerGraph"
             )
@@ -41,7 +46,7 @@ class PrometheusMetrics(metaclass=SingletonMeta):
                 ["query_name"],
             )
 
-            # collect metrics for LLMs
+            # 收集LLMs的指标
             self.llm_inprogress_requests = Gauge(
                 "llm_inprogress_requests",
                 "Number of LLM requests in progress",
@@ -73,7 +78,7 @@ class PrometheusMetrics(metaclass=SingletonMeta):
                 ["llm_model"],
             )
 
-            # collect metrics for Milvus
+            # 收集Milvus的指标
             self.milvus_active_connections = Gauge(
                 "milvus_active_connections",
                 "Number of active connections to Milvus",
@@ -90,7 +95,7 @@ class PrometheusMetrics(metaclass=SingletonMeta):
                 ["collection_name", "method_name"],
             )
 
-            # collect metrics for CoPilot
+            # 为CoPilot收集指标
             self.copilot_endpoint_duration_seconds = Histogram(
                 "copilot_endpoint_duration_seconds",
                 "Duration of the CoPilot endpoint execution",

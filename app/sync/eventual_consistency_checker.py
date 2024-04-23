@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class EventualConsistencyChecker:
+    """ 最终一致性检查器 """
     def __init__(
         self,
         interval_seconds,
@@ -38,7 +39,9 @@ class EventualConsistencyChecker:
         self.chunker = chunker
         self.extractor = extractor
 
+        # 扫描指定类型的顶点，并根据它们的时间戳属性确定哪些顶点需要处理或更新；同时提取这些顶点的相关文本或定义
         self._check_query_install("Scan_For_Updates")
+        # 更新一组特定顶点的处理状态。专门用于修改这些顶点的时间戳属性，标记它们为已处理状态。
         self._check_query_install("Update_Vertices_Processing_Status")
 
     def _install_query(self, query_name):
@@ -180,11 +183,15 @@ class EventualConsistencyChecker:
         )
 
     async def fetch_and_process_vertex(self):
+        """ 获取和处理图数据库中的顶点。
+        确保数据的最新状态，并且通过向量索引支持复杂的查询和分析操作。 """
+
         v_types_to_scan = self.embedding_indices
         vertex_ids_content_map: dict = {}
         batch_size = doc_processing_config.get("batch_size", 10)
         for v_type in v_types_to_scan:
             LogWriter.info(f"Fetching vertex ids and content for vertex type: {v_type}")
+            # 运行Scan_For_Updates查询语句，获取需要更新的点的相关文本或定义
             vertex_ids_content_map = self.conn.runInstalledQuery(
                 "Scan_For_Updates", {"v_type": v_type, "num_samples": batch_size}
             )[0]["@@v_and_text"]
@@ -193,18 +200,23 @@ class EventualConsistencyChecker:
             LogWriter.info(
                 f"Remove existing entries from Milvus with vertex_ids in {str(vertex_ids)}"
             )
+            # 先从Milvus中删除
+            # embedding_stores：向量索引dict
             self.embedding_stores[self.graphname + "_" + v_type].remove_embeddings(
                 expr=f"{self.vertex_field} in {str(vertex_ids)}"
             )
 
             LogWriter.info(f"Embedding content from vertex type: {v_type}")
+            # 再添加到Milvus
             for vertex_id, content in vertex_ids_content_map.items():
                 if content != "":
+                    # 获得嵌入向量
                     vec = self.embedding_service.embed_query(content)
+                    # 将嵌入添加到嵌入存储中
                     self.embedding_stores[self.graphname + "_" + v_type].add_embeddings(
                         [(content, vec)], [{self.vertex_field: vertex_id}]
                     )
-
+            # 内容分块
             if v_type == "Document":
                 LogWriter.info(f"Chunking the content from vertex type: {v_type}")
                 for vertex_id, content in vertex_ids_content_map.items():
@@ -214,11 +226,13 @@ class EventualConsistencyChecker:
                             vertex_id, f"{vertex_id}_chunk_{i}", chunk
                         )
 
+            # 更新顶点处理状态
             if v_type == "Document" or v_type == "DocumentChunk":
                 LogWriter.info(
                     f"Extracting and upserting entities from the content from vertex type: {v_type}"
                 )
                 for vertex_id, content in vertex_ids_content_map.items():
+                    # 从文档中提取实体关系
                     extracted = await self._extract_entities(content)
                     if len(extracted["nodes"]) > 0:
                         await self._upsert_entities(
@@ -232,6 +246,7 @@ class EventualConsistencyChecker:
             )
             if vertex_ids:
                 vertex_ids = [(vertex_id, v_type) for vertex_id in vertex_ids]
+                # 更新处理状态。专门用于修改这些顶点的时间戳属性，标记它们为已处理状态。
                 self.conn.runInstalledQuery(
                     "Update_Vertices_Processing_Status",
                     {"processed_vertices": vertex_ids},
@@ -253,5 +268,6 @@ class EventualConsistencyChecker:
             LogWriter.info(
                 f"Eventual Consistency Check initializing for graphname {self.graphname} with interval_seconds {self.interval_seconds}"
             )
+            # 创建一个异步任务
             asyncio.create_task(self.run_periodic_task())
             self.is_initialized = True

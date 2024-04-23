@@ -23,6 +23,11 @@ from app.tools.logwriter import LogWriter
 from app.tools.validation_utils import MapQuestionToSchemaException
 from app.util import get_db_connection
 
+"""
+自然语言查询服务，允许用户用简单的英语询问有关其图形数据的问题。
+该服务使用大型语言模型（LLM）将用户的问题转换为函数调用，然后在图形数据库上执行。
+"""
+
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["InquiryAI"])
 
@@ -31,8 +36,14 @@ router = APIRouter(tags=["InquiryAI"])
 def retrieve_answer(
     graphname,
     query: NaturalLanguageQuery,
+    # Depends：依赖注入，在调用该函数时为参数自动注入所需的依赖项。
+    # get_db_connection 函数应当返回一个 TigerGraphConnectionProxy 类型的对象，这个对象会被自动注入到 conn 参数中。
     conn: TigerGraphConnectionProxy = Depends(get_db_connection),
 ) -> CoPilotResponse:
+    """
+    检索给定问题的答案。
+    conn: 一个PyTigerGraph TigerGraphConnection对象实例化，以与所需的数据库/图交互，并使用正确的角色进行身份验证。
+    """
     logger.debug_pii(
         f"/{graphname}/query request_id={req_id_cv.get()} question={query.query}"
     )
@@ -40,6 +51,7 @@ def retrieve_answer(
         f"/{graphname}/query request_id={req_id_cv.get()} database connection created"
     )
 
+    # 创建llm相应的 代理执行器，其中包含了mq2s和gen_func
     if llm_config["completion_service"]["llm_service"].lower() == "openai":
         logger.debug(
             f"/{graphname}/query request_id={req_id_cv.get()} llm_service=openai agent created"
@@ -101,13 +113,15 @@ def retrieve_answer(
     )
     steps = ""
     try:
+        # 调用代理处理问题，返回结果
         steps = agent.question_for_agent(query.query)
-        # try again if there were no steps taken
+        # 如果没有采取任何步骤，请再试一次
         if len(steps["intermediate_steps"]) == 0:
             steps = agent.question_for_agent(query.query)
 
         logger.debug(f"/{graphname}/query request_id={req_id_cv.get()} agent executed")
         try:
+            # 修饰响应结果
             generate_func_output = steps["intermediate_steps"][-1][-1]
             resp.natural_language_response = steps["output"]
             resp.query_sources = {
@@ -130,6 +144,7 @@ def retrieve_answer(
                 f"/{graphname}/query request_id={req_id_cv.get()} agent execution failed due to unknown exception"
             )
             pmetrics.llm_query_error_total.labels(embedding_service.model_name).inc()
+            # 打印错误日志
             exc = traceback.format_exc()
             logger.debug_pii(
                 f"/{graphname}/query request_id={req_id_cv.get()} Exception Trace:\n{exc}"
@@ -177,6 +192,7 @@ def get_query_embedding(
         f"/{graphname}/getqueryembedding request_id={req_id_cv.get()} question={query.query}"
     )
 
+    # 为查询文本生成长度安全的嵌入向量
     return embedding_service.embed_query(query.query)
 
 
@@ -185,6 +201,8 @@ def register_docs(
     graphname,
     query_list: Union[GSQLQueryInfo, List[GSQLQueryInfo]],
 ):
+    """注册定制查询方法"""
+
     logger.debug(f"Using embedding store: {embedding_store}")
     results = []
 
@@ -196,7 +214,9 @@ def register_docs(
             f"/{graphname}/register_docs request_id={req_id_cv.get()} registering {query_info.function_header}"
         )
 
+        # 为查询文本生成长度安全的嵌入向量
         vec = embedding_service.embed_query(query_info.docstring)
+        # 添加到向量存储中
         res = embedding_store.add_embeddings(
             [(query_info.docstring, vec)],
             [
@@ -224,6 +244,8 @@ def upsert_docs(
     graphname,
     request_data: Union[QueryUperstRequest, List[QueryUperstRequest]],
 ):
+    """ 更新定制查询方法 """
+
     try:
         results = []
 
@@ -244,7 +266,9 @@ def upsert_docs(
                 f"/{graphname}/upsert_docs request_id={req_id_cv.get()} upserting document(s)"
             )
 
+            # 为查询文本生成长度安全的嵌入向量
             vec = embedding_service.embed_query(query_info.docstring)
+            # 更新到向量存储中
             res = embedding_store.upsert_embeddings(
                 id,
                 [(query_info.docstring, vec)],
@@ -274,6 +298,7 @@ def upsert_docs(
 
 @router.post("/{graphname}/delete_docs")
 def delete_docs(graphname, request_data: QueryDeleteRequest):
+    """ 删除定制查询方法 """
     ids = request_data.ids
     expr = request_data.expr
 
@@ -289,7 +314,7 @@ def delete_docs(graphname, request_data: QueryDeleteRequest):
         f"/{graphname}/delete_docs request_id={req_id_cv.get()} deleting document(s)"
     )
 
-    # Call the remove_embeddings method based on provided IDs or expression
+    # 根据提供的id或表达式调用remove_embeddings方法
     try:
         if expr:
             res = embedding_store.remove_embeddings(expr=expr)
@@ -311,6 +336,7 @@ def retrieve_docs(
     query: NaturalLanguageQuery,
     top_k: int = 3,
 ):
+    """ 从给定查询嵌入的向量存储中检索top_k相似的嵌入。"""
     logger.debug_pii(
         f"/{graphname}/retrieve_docs request_id={req_id_cv.get()} top_k={top_k} question={query.query}"
     )
@@ -333,16 +359,22 @@ def logout(graphname, session_id: str):
 
 @router.get("/{graphname}/chat")
 def chat(request: Request):
+    """读取chat.html文件的内容，并将其作为HTML响应返回。"""
     return HTMLResponse(open("app/static/chat.html").read())
 
 
 @router.websocket("/{graphname}/ws")
 async def websocket_endpoint(websocket: WebSocket, graphname: str, session_id: str):
+    """实现一个基于WebSocket的API，WebSocket 协议使得数据可以在用户和服务器之间双向传输"""
     session = session_handler.get_session(session_id)
+    # 获取与客户端连接的WebSocket对象，并调用accept()方法接受连接。
     await websocket.accept()
     while True:
+        # 持续监听客户端发送的消息
         data = await websocket.receive_text()
+        # 回答
         res = retrieve_answer(
             graphname, NaturalLanguageQuery(query=data), session.db_conn
         )
+        # 将响应发送回客户端
         await websocket.send_text(f"{res.natural_language_response}")

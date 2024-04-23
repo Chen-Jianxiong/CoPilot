@@ -1,4 +1,5 @@
-CREATE QUERY HNSW_Search_Sub(STRING v_type, STRING milvus_host, 
+-- 子查询函数，主要用于执行基于 Milvus 的高效向量搜索，找出与给定查询向量最相似的顶点集合。
+CREATE QUERY HNSW_Search_Sub(STRING v_type, STRING milvus_host,
   UINT milvus_port, STRING collection_name, STRING vector_field_name, 
   STRING vertex_id_field_name, STRING metric_type="L2", INT top_k, STRING query_vector_as_string) RETURNS(SetAccum<VERTEX>) { 
     SetAccum<VERTEX> @@return_set;

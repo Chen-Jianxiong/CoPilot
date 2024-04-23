@@ -55,7 +55,7 @@ class FAISS_EmbeddingStore(EmbeddingStore):
         metadatas: List[dict] = None,
     ):
         """Add Embeddings.
-        Add embeddings to the Embedding store.
+        将嵌入添加到嵌入存储中。
         Args:
             embeddings (Iterable[Tuple[str, List[float], int]]):
                 Iterable of content and embedding of the document.

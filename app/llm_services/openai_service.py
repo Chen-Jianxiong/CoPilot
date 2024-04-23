@@ -11,6 +11,7 @@ class OpenAI(LLM_Model):
     def __init__(self, config):
         super().__init__(config)
         for auth_detail in config["authentication_configuration"].keys():
+            # 将OPENAI_API_KEY 导出为环境变量。
             os.environ[auth_detail] = config["authentication_configuration"][
                 auth_detail
             ]
@@ -36,6 +37,7 @@ class OpenAI(LLM_Model):
 
     @property
     def entity_relationship_extraction_prompt(self):
+        """实体关系抽取"""
         return self._read_prompt_file(
             self.prompt_path + "entity_relationship_extraction.txt"
         )
