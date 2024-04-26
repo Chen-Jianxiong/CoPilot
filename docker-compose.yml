@@ -1,5 +1,5 @@
 version: '3.8'
-
+# 构建后的镜像名：copilot_copilot
 services:
   # 用于监控和日志记录的服务。
   copilot:
@@ -19,7 +19,7 @@ services:
     volumes:
       - ./configs/:/code/configs
 
-  # 用于分布式锁的服务。
+  # 提供高可用、强一致性的小型的kv数据存储服务。
   etcd:
       container_name: milvus-etcd
       image: quay.io/coreos/etcd:v3.5.5

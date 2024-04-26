@@ -61,6 +61,7 @@ class BaseRetriever:
 
     def _generate_embedding(self, text) -> str:
         return (
+            # 使用嵌入服务获取问题嵌入
             str(self.emb_service.embed_query(text))
             .strip("[")
             .strip("]")

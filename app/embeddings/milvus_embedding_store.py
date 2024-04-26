@@ -425,6 +425,7 @@ class MilvusEmbeddingStore(EmbeddingStore):
     def add_connection_parameters(self, query_params: dict) -> dict:
         """Add Connection Parameters.
         Add connection parameters to the query parameters.
+        增加 milvus_host、milvus_port 参数
         Args:
             query_params (dict):
                 Dictionary containing the parameters for the GSQL query.

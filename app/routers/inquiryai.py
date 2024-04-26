@@ -263,9 +263,11 @@ def upsert_from_gsql(
     query_list: GSQLQueryList,
     conn: Request
 ):
+    """ 根据传入的gsql查询列表，更新定制查询方法 """
     conn = conn.state.conn
 
     query_names = query_list.queries
+    # 获取查询的描述信息
     query_descs = conn.getQueryDescription(query_names)
 
     query_info_list = []
@@ -297,6 +299,7 @@ def delete_from_gsql(
     query_list: GSQLQueryList,
     conn: Request
 ):
+    """ 根据传入的gsql查询列表，删除定制查询方法 """
     conn = conn.state.conn
 
     query_names = query_list.queries

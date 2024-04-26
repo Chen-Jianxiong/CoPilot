@@ -277,7 +277,7 @@ def search(
     conn: Request
 ):
     """
-    搜索，使用llm从提问中提取实体关系，格式化、过滤类型，再由tg执行相关性得分过滤top_K
+    搜索，根据提问生成搜索方法，并执行搜索与之相关的tok_k信息
     """
     conn = conn.state.conn
     if query.method.lower() == "hnswoverlap":
@@ -326,7 +326,7 @@ def search(
         retriever = EntityRelationshipRetriever(
             embedding_service, embedding_store, get_llm_service(llm_config), conn
         )
-        # 执行检索，使用llm从提问中提取实体关系，格式化、过滤类型，再由tg执行查询语句检索top_K
+        # 执行检索，使用llm从提问中提取实体关系，再由tg执行查询语句检索与之相关的top_K片段
         res = retriever.search(query.question, query.method_params["top_k"])
 
     return res
@@ -433,7 +433,7 @@ async def force_update(
     graphname: str, conn: Request
 ):
     """
-    强制更新，执行最终一次性检查器
+    强制更新，执行最终一次性检查器，协调 Milvus 和 TigerGraph 数据
     """
     conn = conn.state.conn
     get_eventual_consistency_checker(graphname, conn)

@@ -17,7 +17,7 @@ class HNSWOverlapRetriever(BaseRetriever):
         # 检查查询在数据库中是否存在，若不存在则安装查询
         # 子查询函数，主要用于执行基于 Milvus 的高效向量搜索，找出与给定查询向量最相似的顶点集合。
         self._check_query_install("HNSW_Search_Sub")
-        # 通过整合 Milvus 的高效向量搜索和 TigerGraph 的图探索能力，来处理和回答复杂的查询请求。
+        # 从一个向量搜索系统中检索与给定查询向量最相似的顶点，并进一步探索这些顶点的关系和属性。
         self._check_query_install("HNSW_Overlap_Search")
 
     def search(self, question, indices, top_k=1, num_hops=2, num_seen_min=1):
@@ -27,6 +27,7 @@ class HNSWOverlapRetriever(BaseRetriever):
         # 执行 HNSW_Overlap_Search 搜索查询
         res = self.conn.runInstalledQuery(
             "HNSW_Overlap_Search",
+            # 添加存储库的参数到查询中
             self.embedding_store.add_connection_parameters(
                 {
                     "query_vector_as_string": query_embedding,

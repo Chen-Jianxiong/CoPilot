@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class EventualConsistencyChecker:
-    """ 最终一致性检查器 """
+    """ 最终一致性检查器，协调 Milvus 和 TigerGraph 数据 """
     def __init__(
         self,
         interval_seconds,
