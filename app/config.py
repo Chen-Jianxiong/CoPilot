@@ -9,7 +9,6 @@ from app.embeddings.embedding_services import (
     OpenAI_Embedding,
     VertexAI_PaLM_Embedding,
 )
-from app.embeddings.faiss_embedding_store import FAISS_EmbeddingStore
 from app.embeddings.milvus_embedding_store import MilvusEmbeddingStore
 from app.llm_services import (
     AWS_SageMaker_Endpoint,
@@ -114,14 +113,13 @@ def get_llm_service(llm_config):
     else:
         raise Exception("LLM Completion Service Not Supported")
 
-# 一个EmbeddingStore类，它连接到一个嵌入库来检索pyTigerGraph和自定义查询文档。
-#embedding_store = FAISS_EmbeddingStore(embedding_service)
 
 LogWriter.info(
     f"Milvus enabled for host {milvus_config['host']} at port {milvus_config['port']}"
 )
 
-LogWriter.info(f"Setting up Milvus embedding store for InquiryAI")
+LogWriter.info("Setting up Milvus embedding store for InquiryAI")
+# 一个EmbeddingStore类，它连接到一个嵌入库来检索pyTigerGraph和自定义查询文档。
 embedding_store = MilvusEmbeddingStore(
     embedding_service,
     host=milvus_config["host"],
@@ -133,9 +131,7 @@ embedding_store = MilvusEmbeddingStore(
     alias=milvus_config.get("alias", "default"),
 )
 
-support_collection_name = milvus_config.get(
-    "collection_name", "tg_support_documents"
-)
+support_collection_name = milvus_config.get("collection_name", "tg_support_documents")
 LogWriter.info(
     f"Setting up Milvus embedding store for SupportAI with collection_name: {support_collection_name}"
 )

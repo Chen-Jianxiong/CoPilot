@@ -120,19 +120,35 @@ async def log_requests(request: Request, call_next):
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     graphname = request.url.components.path.split("/")[1]
-    if (graphname == "" or graphname == "docs"
+    if (
+        graphname == ""
+        or graphname == "docs"
         or graphname == "openapi.json"
-        or graphname == "metrics" or graphname == "health"):
+        or graphname == "metrics"
+        or graphname == "health"
+    ):
         return await call_next(request)
     authorization = request.headers.get("Authorization")
     if authorization:
         scheme, credentials = authorization.split()
         if scheme.lower() == "basic":
-            username, password = b64decode(credentials).decode().split(':', 1)
+            LogWriter.info("Authenticating with basic auth")
+            username, password = b64decode(credentials).decode().split(":", 1)
             credentials = HTTPBasicCredentials(username=username, password=password)
-            conn = get_db_connection_pwd(graphname, credentials)
+            try:
+                conn = get_db_connection_pwd(graphname, credentials)
+            except HTTPException as e:
+                LogWriter.error("Failed to connect to TigerGraph. Incorrect username or password.")
+                return JSONResponse(status_code=401,
+                                    content={"message": "Failed to connect to TigerGraph. Incorrect username or password."})
         else:
-            conn = get_db_connection_id_token(graphname, credentials)
+            LogWriter.info("Authenticating with id token")
+            try:
+                conn = get_db_connection_id_token(graphname, credentials)
+            except HTTPException as e:
+                LogWriter.error("Failed to connect to TigerGraph. Incorrect ID Token.")
+                return JSONResponse(status_code=401,
+                                    content={"message": "Failed to connect to TigerGraph. Incorrect ID Token."})
         request.state.conn = conn
     response = await call_next(request)
     return response

@@ -1,20 +1,31 @@
 import json
 import logging
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi.security.http import HTTPBase
 
-from app.config import (embedding_service, embedding_store, get_llm_service,
-                        llm_config)
+from app.config import embedding_service, embedding_store, get_llm_service, llm_config
 
-from app.py_schemas.schemas import (CoPilotResponse, CreateIngestConfig,
-                                    LoadingInfo, SupportAIQuestion)
+from app.py_schemas.schemas import (
+    CoPilotResponse,
+    CreateIngestConfig,
+    LoadingInfo,
+    SupportAIQuestion,
+)
 from app.supportai.concept_management.create_concepts import (
-    CommunityConceptCreator, EntityConceptCreator, HigherLevelConceptCreator,
-    RelationshipConceptCreator)
-from app.supportai.retrievers import (EntityRelationshipRetriever,
-                                      HNSWOverlapRetriever, HNSWRetriever,
-                                      HNSWSiblingRetriever)
+    CommunityConceptCreator,
+    EntityConceptCreator,
+    HigherLevelConceptCreator,
+    RelationshipConceptCreator,
+)
+from app.supportai.retrievers import (
+    EntityRelationshipRetriever,
+    HNSWOverlapRetriever,
+    HNSWRetriever,
+    HNSWSiblingRetriever,
+)
 
 from app.util import get_eventual_consistency_checker
 
@@ -26,13 +37,13 @@ from app.util import get_eventual_consistency_checker
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["SupportAI"])
 
+security = HTTPBase(scheme="basic", auto_error=False)
 
 @router.post("/{graphname}/supportai/initialize")
-def initialize(graphname, conn: Request):
+def initialize(graphname, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
     """ 读取gsql文件，并使用conn.gsql()执行gsql文件中的语句。以初始化supportai """
     # 需要使用绝对路径打开文件
     # 定义了一个schema change job，其主要目的是在图数据库中添加一系列新的顶点类型和边类型。
-
     conn = conn.state.conn
     # need to open the file using the absolute path
     file_path = "app/gsql/supportai/SupportAI_Schema.gsql"
@@ -83,17 +94,14 @@ def initialize(graphname, conn: Request):
         # 包括host_name以便从客户端进行调试。它们的pyTG conn可能与在copilot中配置的主机不同
         "host_name": conn._tg_connection.host,
         "schema_creation_status": json.dumps(schema_res),
-        "index_creation_status": json.dumps(index_res)
+        "index_creation_status": json.dumps(index_res),
     }
 
 
 @router.post("/{graphname}/supportai/create_ingest")
-def create_ingest(
-    graphname,
-    ingest_config: CreateIngestConfig,
-    conn: Request
-):
+def create_ingest(graphname, ingest_config: CreateIngestConfig, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
     """ 摄取文档前的准备工作 """
+
     conn = conn.state.conn
 
     if ingest_config.file_format.lower() == "json":
@@ -225,7 +233,8 @@ def ingest(
     graphname,
     loader_info: LoadingInfo,
     background_tasks: BackgroundTasks,
-    conn: Request
+    conn: Request,
+    credentials: Annotated[HTTPBase, Depends(security)]
 ):
     conn = conn.state.conn
     # 添加一个在发送响应后在后台调用的函数（最终一致性检查器）。
@@ -271,14 +280,11 @@ def ingest(
 
 
 @router.post("/{graphname}/supportai/search")
-def search(
-    graphname,
-    query: SupportAIQuestion,
-    conn: Request
-):
+def search(graphname, query: SupportAIQuestion, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
     """
     搜索，根据提问生成搜索方法，并执行搜索与之相关的tok_k信息
     """
+
     conn = conn.state.conn
     if query.method.lower() == "hnswoverlap":
         # 创建基于 HNSW 索引的 overlap 搜索对象
@@ -333,11 +339,7 @@ def search(
 
 
 @router.post("/{graphname}/supportai/answerquestion")
-def answer_question(
-    graphname,
-    query: SupportAIQuestion,
-    conn: Request
-):
+def answer_question(graphname, query: SupportAIQuestion, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
     """
     与search相同的执行，在其结果上由llm生成回答
     """
@@ -406,6 +408,7 @@ def build_concepts(
     graphname,
     background_tasks: BackgroundTasks,
     conn: Request,
+    credentials: Annotated[HTTPBase, Depends(security)]
 ):
     """
     创建相关概念
@@ -429,12 +432,22 @@ def build_concepts(
 
 
 @router.get("/{graphname}/supportai/forceupdate")
-async def force_update(
-    graphname: str, conn: Request
-):
+async def force_update(graphname: str, background_tasks: BackgroundTasks, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
     """
     强制更新，执行最终一次性检查器，协调 Milvus 和 TigerGraph 数据
     """
     conn = conn.state.conn
-    get_eventual_consistency_checker(graphname, conn)
+    background_tasks.add_task(get_eventual_consistency_checker, graphname, conn)
+    return {"status": "success"}
+
+
+@router.get("/{graphname}/supportai/consistency_status")
+def consistency_status(graphname: str, conn: Request, credentials: Annotated[HTTPBase, Depends(security)]):
+    conn = conn.state.conn
+    ecc = get_eventual_consistency_checker(graphname, conn)
+    return ecc.get_status()
+
+
+@router.get("/{graphname}/supportai/auth_check")
+def auth_check(graphname: str, credentials: Annotated[HTTPBase, Depends(security)]):
     return {"status": "success"}

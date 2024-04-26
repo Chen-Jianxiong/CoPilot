@@ -71,13 +71,13 @@ def validate_schema(conn, v_types, e_types, v_attrs, e_attrs):
     return True
 
 
-def validate_function_call(conn, generated_call: str, retrieved_docs: list) -> str:
+def validate_function_call(conn, generated_call: str, valid_functions: list) -> str:
     """验证调用语句的正确性，返回函数名"""
+
     # handle installed queries
     LogWriter.info(f"request_id={req_id_cv.get()} ENTRY validate_function_call()")
     generated_call = generated_call.strip().strip("\n").strip("\t")
     # LogWriter.info(f"generated_call: {generated_call}")
-    valid_headers = [doc.metadata.get("function_header") for doc in retrieved_docs]
     # LogWriter.info(f"valid_headers: {valid_headers}")
     # 在数据库中安装查询
     endpoints = conn.getEndpoints(dynamic=True)
@@ -94,7 +94,7 @@ def validate_function_call(conn, generated_call: str, retrieved_docs: list) -> s
         logger.debug_pii(
             f"request_id={req_id_cv.get()} validate_function_call() validating query_call={generated_call}"
         )
-        if query_name in valid_headers and query_name in installed_queries:
+        if query_name in valid_functions and query_name in installed_queries:
             LogWriter.info(
                 f"request_id={req_id_cv.get()} EXIT validate_function_call()"
             )
@@ -111,12 +111,12 @@ def validate_function_call(conn, generated_call: str, retrieved_docs: list) -> s
             )
     elif "conn." == generated_call[:5]:
         return validate_function_call(
-            conn, generated_call.strip("conn."), retrieved_docs
+            conn, generated_call.strip("conn."), valid_functions
         )
     else:  # handle pyTG functions
         func_header = generated_call.split("(")[0]
         if (
-            func_header in valid_headers
+            func_header in valid_functions
         ):  # could do more type parsing for args and things here, but will let it be for now.
             logger.debug(
                 f"request_id={req_id_cv.get()} validate_function_call() validating function_header={func_header}"
